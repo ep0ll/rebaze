@@ -3,11 +3,12 @@ package bazer
 import (
 	"fmt"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
+
+	"github.com/ep0ll/rebaze/internal/history"
+	"github.com/ep0ll/rebaze/internal/rebase"
+	"github.com/ep0ll/rebaze/internal/remote"
 	"github.com/spf13/cobra"
 )
 
@@ -23,10 +24,6 @@ var rebaseCmd = &cobra.Command{
 	Long: `Rebase rewrites an image so that the layers belonging to the old base
 are replaced by the layers of the new base. Application layers above the base
 are preserved.
-
-This is the same fundamental operation performed by crane rebase and the
-Cloud Native Buildpacks rebaser. It is extremely efficient when the registry
-supports cross-repository blob mounts.
 
 Example:
   rebaze rebase my-app:1.2.3 \
@@ -45,35 +42,18 @@ func init() {
 }
 
 func runRebase(cmd *cobra.Command, args []string) error {
-	origRef, err := name.ParseReference(args[0], name.WeakValidation)
+	origImg, origRef, err := remote.Image(args[0])
 	if err != nil {
-		return fmt.Errorf("parse original image: %w", err)
-	}
-
-	newBaseRef, err := name.ParseReference(rebaseNewBase, name.WeakValidation)
-	if err != nil {
-		return fmt.Errorf("parse new-base: %w", err)
-	}
-
-	authOpt := remote.WithAuthFromKeychain(authn.DefaultKeychain)
-
-	origImg, err := remote.Image(origRef, authOpt)
-	if err != nil {
-		return fmt.Errorf("fetch original image: %w", err)
+		return err
 	}
 
 	var oldBaseImg v1.Image
 	if rebaseOldBase != "" {
-		oldBaseRef, err := name.ParseReference(rebaseOldBase, name.WeakValidation)
+		oldBaseImg, _, err = remote.Image(rebaseOldBase)
 		if err != nil {
-			return fmt.Errorf("parse old-base: %w", err)
-		}
-		oldBaseImg, err = remote.Image(oldBaseRef, authOpt)
-		if err != nil {
-			return fmt.Errorf("fetch old-base image: %w", err)
+			return err
 		}
 	} else {
-		// Attempt to use OCI base annotations when present
 		mf, err := origImg.Manifest()
 		if err != nil {
 			return fmt.Errorf("read original manifest: %w", err)
@@ -83,46 +63,46 @@ func runRebase(cmd *cobra.Command, args []string) error {
 		if !ok1 || !ok2 {
 			return fmt.Errorf("--old-base is required when the image lacks OCI base annotations")
 		}
-		oldBaseRef, err := name.ParseReference(fmt.Sprintf("%s@%s", baseName, baseDigest), name.WeakValidation)
+		oldBaseImg, _, err = remote.Image(fmt.Sprintf("%s@%s", baseName, baseDigest))
 		if err != nil {
-			return fmt.Errorf("parse annotated base: %w", err)
-		}
-		oldBaseImg, err = remote.Image(oldBaseRef, authOpt)
-		if err != nil {
-			return fmt.Errorf("fetch annotated old-base: %w", err)
+			return err
 		}
 	}
 
-	newBaseImg, err := remote.Image(newBaseRef, authOpt)
+	newBaseImg, _, err := remote.Image(rebaseNewBase)
 	if err != nil {
-		return fmt.Errorf("fetch new-base image: %w", err)
+		return err
 	}
 
-	rebased, err := mutate.Rebase(origImg, oldBaseImg, newBaseImg)
+	rebased, err := rebase.Images(origImg, oldBaseImg, newBaseImg)
 	if err != nil {
-		return fmt.Errorf("rebase: %w", err)
+		return err
 	}
 
-	target := origRef
+	target := origRef.String()
 	if rebaseTag != "" {
-		target, err = name.ParseReference(rebaseTag, name.WeakValidation)
-		if err != nil {
+		if _, err := name.ParseReference(rebaseTag, name.WeakValidation); err != nil {
 			return fmt.Errorf("parse --tag: %w", err)
 		}
+		target = rebaseTag
 	}
 
-	if err := remote.Write(target, rebased, authOpt); err != nil {
-		return fmt.Errorf("push rebased image: %w", err)
-	}
-
-	digest, err := rebased.Digest()
+	ref, digest, err := remote.Write(target, rebased)
 	if err != nil {
-		return fmt.Errorf("compute digest: %w", err)
+		return err
 	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s@%s\n", ref.Context().Name(), digest)
 
-	fmt.Printf("%s@%s\n", target.Context().Name(), digest)
+	path, herr := history.DefaultPath()
+	if herr == nil {
+		_ = history.Append(path, history.Event{
+			Action:      "rebase",
+			Source:      args[0],
+			Destination: target,
+			Digest:      digest.String(),
+		})
+	}
 	return nil
 }
 
-// Keep the old helper name for residual references.
 var rebase = rebaseCmd

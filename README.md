@@ -1,88 +1,89 @@
 # rebaze
 
-**rebaze** is a production-oriented CLI for efficient OCI / Docker image mutation and rebasing.
+**rebaze** is a CLI for efficient OCI / Docker image mutation and rebasing.
+Replace base layers or apply structured config/layer plans without a full rebuild.
 
-It lets you replace base layers of an image (or apply structured patches) without a full rebuild — ideal for rolling out base-image security fixes, OS updates, or configuration changes across many application images.
+## Commands
 
-Inspired by `crane rebase`, Cloud Native Buildpacks rebaser, and OCI mutation patterns, with an extensible patch/audit schema designed for enterprise governance.
+| Command    | Status |
+|------------|--------|
+| `inspect`  | Implemented |
+| `rebase`   | Implemented |
+| `apply`    | Implemented |
+| `preview`  | Implemented |
+| `patch`    | Implemented |
+| `copy`     | Implemented |
+| `export`   | Implemented |
+| `history`  | Implemented (local ledger) |
+| `rollback` | Implemented (from local ledger) |
+| `sign`     | Implemented (ed25519 plan signatures) |
 
-## Status
-
-| Command   | Status          | Notes                                      |
-|-----------|-----------------|--------------------------------------------|
-| `inspect` | ✅ Working      | Manifest / index inspection                |
-| `rebase`  | ✅ Working      | Core rebase (old-base → new-base)          |
-| `apply`   | 🚧 Planned      | Apply structured MutationBundle / patch    |
-| `patch`   | 🚧 Planned      | Create patch artifacts                     |
-| `preview` | 🚧 Planned      | Dry-run mutation plan                      |
-| `history` | 🚧 Planned      | Audit / mutation history                   |
-| `rollback`| 🚧 Planned      | Inverse apply / pointer revert             |
-| `sign`    | 🚧 Planned      | Cosign / notation signing                  |
-| `copy`    | 🚧 Planned      | Efficient registry copy                    |
-| `export`  | 🚧 Planned      | Export mutation plan / SBOM                |
-
-## Installation
+## Install
 
 ```bash
 go install github.com/ep0ll/rebaze/cli@latest
-```
-
-Or build from source:
-
-```bash
-git clone https://github.com/ep0ll/rebaze.git
-cd rebaze
+# or
 make build
 ```
 
-## Quick Start
-
-### Inspect an image
+## Usage
 
 ```bash
 rebaze inspect ubuntu:latest
-rebaze inspect ghcr.io/example/app@sha256:...
-```
 
-### Rebase an image onto a new base
-
-```bash
 rebaze rebase my-app:1.2.3 \
   --old-base ubuntu:22.04 \
   --new-base ubuntu:24.04 \
   --tag my-app:1.2.3-rebased
+
+rebaze patch --image my-app:1.2.3 --set-env FOO=bar --set-user 65532 --out plan.json
+rebaze preview --plan plan.json
+rebaze apply --plan plan.json --tag my-app:1.2.3-mutated
+
+rebaze copy alpine:latest localhost:5000/alpine:latest
+rebaze export alpine:latest
+
+rebaze sign --keygen --private ed25519.key --public ed25519.pub
+rebaze sign plan.json --private ed25519.key
+rebaze sign plan.json --verify --public ed25519.pub
+
+rebaze history
+rebaze rollback my-app:1.2.3-mutated
 ```
 
-If the original image carries the standard OCI base annotations
-(`org.opencontainers.image.base.digest` / `org.opencontainers.image.base.name`)
-the `--old-base` flag can often be omitted.
+### Mutation plan format
 
-## Architecture
-
+```json
+{
+  "schemaVersion": "1.0",
+  "kind": "MutationPlan",
+  "image": "my-app:1.0",
+  "tag": "my-app:1.0-mutated",
+  "config": {
+    "setEnv": { "FOO": "bar" },
+    "unsetEnv": ["LEGACY"],
+    "setLabel": { "app": "my-app" },
+    "setEntrypoint": ["/usr/bin/app"],
+    "setUser": "65532",
+    "setWorkdir": "/home/nonroot"
+  },
+  "layers": {
+    "delete": [0],
+    "insert": [{ "index": 1, "from": "busybox:latest" }],
+    "append": ["ghcr.io/example/sidecar-layer:1"]
+  },
+  "annotations": {
+    "org.opencontainers.image.description": "mutated by rebaze"
+  }
+}
 ```
-cli/                  # Cobra CLI entrypoint
-  internal/bazer/     # Command implementations
-internal/             # Core domain packages (apply, rebase, history, …)
-specs/v1/             # Typed Go representations of the mutation schema
-schema/               # JSON Schema definitions (MutationBundle, patches, …)
-```
-
-The long-term design centres on a **MutationBundle** (see `schema.json`) that
-supports:
-
-- DAG-ordered operations (manifest / config / layer / blob / verify)
-- Governance, approvals, and policy constraints
-- Full audit ledger and recovery plans
-- Observability hooks
 
 ## Development
 
 ```bash
-make tidy          # go mod tidy
-make build         # build binary to bin/rebaze
-make test          # unit tests
-make lint          # golangci-lint (if installed)
-make ci            # local CI approximation
+make tidy
+make build
+make test
 ```
 
 ## License

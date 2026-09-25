@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ep0ll/rebaze/internal/remote"
@@ -57,6 +58,7 @@ func applyLayers(img v1.Image, spec *LayerMut) (v1.Image, []string, error) {
 		return nil, nil, err
 	}
 
+	rebuild := false
 	if len(spec.Delete) > 0 {
 		deleteSet := map[int]struct{}{}
 		for _, i := range spec.Delete {
@@ -73,11 +75,8 @@ func applyLayers(img v1.Image, spec *LayerMut) (v1.Image, []string, error) {
 			}
 			kept = append(kept, l)
 		}
-		img, err = mutate.AppendLayers(emptyFrom(img), kept...)
-		if err != nil {
-			return nil, nil, fmt.Errorf("rebuild after delete: %w", err)
-		}
 		layers = kept
+		rebuild = true
 	}
 
 	if len(spec.Insert) > 0 {
@@ -106,9 +105,13 @@ func applyLayers(img v1.Image, spec *LayerMut) (v1.Image, []string, error) {
 			layers = next
 			steps = append(steps, fmt.Sprintf("insert %d layer(s) from %s at index %d", len(donorLayers), ins.From, idx))
 		}
-		img, err = mutate.AppendLayers(emptyFrom(img), layers...)
+		rebuild = true
+	}
+
+	if rebuild {
+		img, err = replaceLayers(img, layers)
 		if err != nil {
-			return nil, nil, fmt.Errorf("rebuild after insert: %w", err)
+			return nil, nil, err
 		}
 	}
 
@@ -131,6 +134,22 @@ func applyLayers(img v1.Image, spec *LayerMut) (v1.Image, []string, error) {
 	return img, steps, nil
 }
 
-func emptyFrom(img v1.Image) v1.Image {
-	return mutate.RemoveConfigFile(img)
+func replaceLayers(img v1.Image, layers []v1.Layer) (v1.Image, error) {
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		return nil, err
+	}
+	out := empty.Image
+	out, err = mutate.ConfigFile(out, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("preserve config while replacing layers: %w", err)
+	}
+	if len(layers) == 0 {
+		return out, nil
+	}
+	out, err = mutate.AppendLayers(out, layers...)
+	if err != nil {
+		return nil, fmt.Errorf("rebuild layers: %w", err)
+	}
+	return out, nil
 }
