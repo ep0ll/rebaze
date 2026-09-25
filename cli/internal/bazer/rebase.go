@@ -6,8 +6,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
-	"github.com/ep0ll/rebaze/internal/history"
-	"github.com/ep0ll/rebaze/internal/rebase"
+	hist "github.com/ep0ll/rebaze/internal/history"
+	rebaser "github.com/ep0ll/rebaze/internal/rebase"
 	"github.com/ep0ll/rebaze/internal/remote"
 	"github.com/spf13/cobra"
 )
@@ -74,7 +74,7 @@ func runRebase(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rebased, err := rebase.Images(origImg, oldBaseImg, newBaseImg)
+	rebased, err := rebaser.Images(origImg, oldBaseImg, newBaseImg)
 	if err != nil {
 		return err
 	}
@@ -93,9 +93,9 @@ func runRebase(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "%s@%s\n", ref.Context().Name(), digest)
 
-	path, herr := history.DefaultPath()
+	path, herr := hist.DefaultPath()
 	if herr == nil {
-		_ = history.Append(path, history.Event{
+		_ = hist.Append(path, hist.Event{
 			Action:      "rebase",
 			Source:      args[0],
 			Destination: target,
@@ -104,5 +104,3 @@ func runRebase(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
-
-var rebase = rebaseCmd

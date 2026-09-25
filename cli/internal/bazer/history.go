@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ep0ll/rebaze/internal/history"
+	hist "github.com/ep0ll/rebaze/internal/history"
 	"github.com/spf13/cobra"
 )
 
-var historyPath string
+var historyFile string
 
 var historyCmd = &cobra.Command{
 	Use:   "history",
@@ -17,19 +17,19 @@ var historyCmd = &cobra.Command{
 }
 
 func init() {
-	historyCmd.Flags().StringVar(&historyPath, "path", "", "Override history file path")
+	historyCmd.Flags().StringVar(&historyFile, "path", "", "Override history file path")
 }
 
 func runHistory(cmd *cobra.Command, args []string) error {
-	path := historyPath
+	path := historyFile
 	var err error
 	if path == "" {
-		path, err = history.DefaultPath()
+		path, err = hist.DefaultPath()
 		if err != nil {
 			return err
 		}
 	}
-	ev, err := history.Load(path)
+	ev, err := hist.Load(path)
 	if err != nil {
 		return err
 	}
@@ -41,5 +41,3 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(ev)
 }
-
-var history = historyCmd

@@ -41,5 +41,3 @@ func runPreview(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "preview digest: %s\n", digest)
 	return nil
 }
-
-var preview = previewCmd

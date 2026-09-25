@@ -3,16 +3,16 @@ package bazer
 import (
 	"fmt"
 
-	"github.com/ep0ll/rebaze/internal/sign"
+	cryptoSign "github.com/ep0ll/rebaze/internal/sign"
 	"github.com/spf13/cobra"
 )
 
 var (
-	signKeygen     bool
-	signVerify     bool
-	signPriv       string
-	signPub        string
-	signOut        string
+	signKeygen bool
+	signVerify bool
+	signPriv   string
+	signPub    string
+	signOut    string
 )
 
 var signCmd = &cobra.Command{
@@ -37,7 +37,7 @@ func init() {
 
 func runSign(cmd *cobra.Command, args []string) error {
 	if signKeygen {
-		if err := sign.GenerateKeyPair(signPriv, signPub); err != nil {
+		if err := cryptoSign.GenerateKeyPair(signPriv, signPub); err != nil {
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "wrote %s and %s\n", signPriv, signPub)
@@ -51,18 +51,16 @@ func runSign(cmd *cobra.Command, args []string) error {
 		signOut = file + ".sig"
 	}
 	if signVerify {
-		if err := sign.VerifyFile(file, signPub, signOut); err != nil {
+		if err := cryptoSign.VerifyFile(file, signPub, signOut); err != nil {
 			return err
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "signature ok")
 		return nil
 	}
-	env, err := sign.SignFile(file, signPriv, signOut)
+	env, err := cryptoSign.SignFile(file, signPriv, signOut)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "signed %s -> %s (%s)\n", file, signOut, env.Algorithm)
 	return nil
 }
-
-var sign = signCmd

@@ -3,12 +3,10 @@ package bazer
 import (
 	"fmt"
 
-	"github.com/ep0ll/rebaze/internal/history"
+	hist "github.com/ep0ll/rebaze/internal/history"
 	"github.com/ep0ll/rebaze/internal/remote"
 	"github.com/spf13/cobra"
 )
-
-var rollbackRef string
 
 var rollbackCmd = &cobra.Command{
 	Use:   "rollback <reference>",
@@ -18,17 +16,17 @@ var rollbackCmd = &cobra.Command{
 }
 
 func runRollback(cmd *cobra.Command, args []string) error {
-	rollbackRef = args[0]
-	path, err := history.DefaultPath()
+	refName := args[0]
+	path, err := hist.DefaultPath()
 	if err != nil {
 		return err
 	}
-	ev, err := history.LastFor(path, rollbackRef)
+	ev, err := hist.LastFor(path, refName)
 	if err != nil {
 		return err
 	}
 	if ev.Previous == "" {
-		return fmt.Errorf("history entry for %s has no previous digest to restore", rollbackRef)
+		return fmt.Errorf("history entry for %s has no previous digest to restore", refName)
 	}
 
 	src := ev.Destination + "@" + ev.Previous
@@ -37,24 +35,21 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	}
 	img, _, err := remote.Image(src)
 	if err != nil {
-		// previous may already be a full digest reference
 		img, _, err = remote.Image(ev.Previous)
 		if err != nil {
 			return fmt.Errorf("fetch previous digest %s: %w", ev.Previous, err)
 		}
 	}
-	ref, digest, err := remote.Write(rollbackRef, img)
+	ref, digest, err := remote.Write(refName, img)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "rolled back %s -> %s@%s\n", rollbackRef, ref.Context().Name(), digest)
-	return history.Append(path, history.Event{
+	fmt.Fprintf(cmd.OutOrStdout(), "rolled back %s -> %s@%s\n", refName, ref.Context().Name(), digest)
+	return hist.Append(path, hist.Event{
 		Action:      "rollback",
 		Source:      ev.Digest,
-		Destination: rollbackRef,
+		Destination: refName,
 		Digest:      digest.String(),
 		Previous:    ev.Digest,
 	})
 }
-
-var rollback = rollbackCmd

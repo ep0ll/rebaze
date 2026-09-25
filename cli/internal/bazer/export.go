@@ -53,5 +53,3 @@ func runExport(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(cmd.ErrOrStderr(), digest.String())
 	return nil
 }
-
-var export = exportCmd

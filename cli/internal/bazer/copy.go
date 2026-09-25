@@ -33,5 +33,3 @@ func runCopy(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
-
-var copy = copyCmd

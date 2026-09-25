@@ -93,5 +93,3 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
-
-var apply = applyCmd

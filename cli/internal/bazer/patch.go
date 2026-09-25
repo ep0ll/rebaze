@@ -82,5 +82,3 @@ func splitKV(kv string) (string, string, bool) {
 	}
 	return "", "", false
 }
-
-var patch = patchCmd
