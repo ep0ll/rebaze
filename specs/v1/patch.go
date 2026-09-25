@@ -3,7 +3,7 @@ package v1
 import (
 	"time"
 
-	"github.com/WYGIN/rebaze/specs"
+	"github.com/ep0ll/rebaze/specs"
 )
 
 // PatchSpec is the core structure that defines a patch artifact for an OCI image

@@ -1,7 +1,17 @@
 package bazer
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
 
-var export = &cobra.Command{
-	Use: "export",
+	"github.com/spf13/cobra"
+)
+
+var exportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "Export a mutation plan, SBOM, or audit ledger",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return fmt.Errorf("export: not yet implemented")
+	},
 }
+
+var export = exportCmd

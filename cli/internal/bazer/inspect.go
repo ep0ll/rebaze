@@ -3,114 +3,65 @@ package bazer
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/spf13/cobra"
 )
 
-var inspect = &cobra.Command{
+var inspectCmd = &cobra.Command{
 	Use:     "inspect <reference>",
-	Short:   "inspect manifest information for a container reference",
-	Example: "rebaze inspect ubuntu:latest",
+	Short:   "Inspect manifest or index information for a container reference",
+	Example: "  rebaze inspect ubuntu:latest\n  rebaze inspect ghcr.io/example/app@sha256:deadbeef",
+	Args:    cobra.ExactArgs(1),
 	RunE:    runInspect,
 }
 
 func runInspect(cmd *cobra.Command, args []string) error {
-	if err := validateArgs(args); err != nil {
-		return err
-	}
-
-	reference, err := parseReference(args[0])
+	ref, err := name.ParseReference(args[0], name.WeakValidation)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse reference: %w", err)
 	}
 
-	descriptor, err := fetchDescriptor(reference)
+	desc, err := remote.Get(ref, remote.WithAuthFromKeychain(authn.DefaultKeychain))
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch descriptor: %w", err)
 	}
 
-	manifest, err := loadManifest(descriptor)
-	if err != nil {
-		return err
+	var payload any
+	switch {
+	case desc.MediaType.IsIndex():
+		idx, err := desc.ImageIndex()
+		if err != nil {
+			return fmt.Errorf("load index: %w", err)
+		}
+		mf, err := idx.IndexManifest()
+		if err != nil {
+			return fmt.Errorf("index manifest: %w", err)
+		}
+		payload = mf
+	case desc.MediaType.IsImage():
+		img, err := desc.Image()
+		if err != nil {
+			return fmt.Errorf("load image: %w", err)
+		}
+		mf, err := img.Manifest()
+		if err != nil {
+			return fmt.Errorf("image manifest: %w", err)
+		}
+		payload = mf
+	default:
+		return errors.New("unsupported media type: " + string(desc.MediaType))
 	}
 
-	return writeJSON(manifest)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
 }
 
-func validateArgs(args []string) error {
-	if len(args) < 1 {
-		return errors.New("reference argument is required")
-	}
-	return nil
-}
-
-func parseReference(ref string) (name.Reference, error) {
-	return name.ParseReference(
-		ref,
-		name.Insecure,
-		name.WeakValidation,
-	)
-}
-
-func fetchDescriptor(ref name.Reference) (*remote.Descriptor, error) {
-	return remote.Get(
-		ref,
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-	)
-}
-
-func loadManifest(desc *remote.Descriptor) (any, error) {
-	indexManifest, err := tryLoadIndexManifest(desc)
-	if err == nil {
-		return indexManifest, nil
-	}
-
-	return loadImageManifest(desc)
-}
-
-func tryLoadIndexManifest(desc *remote.Descriptor) (*v1.IndexManifest, error) {
-	index, err := desc.ImageIndex()
-	if err != nil {
-		return nil, err
-	}
-
-	manifest, err := index.IndexManifest()
-	if err != nil {
-		return nil, err
-	}
-
-	if manifest == nil {
-		return nil, errors.New("index manifest is nil")
-	}
-
-	return manifest, nil
-}
-
-func loadImageManifest(desc *remote.Descriptor) (*v1.Manifest, error) {
-	image, err := desc.Image()
-	if err != nil {
-		return nil, err
-	}
-
-	manifest, err := image.Manifest()
-	if err != nil {
-		return nil, err
-	}
-
-	if manifest == nil {
-		return nil, errors.New("image manifest is nil")
-	}
-
-	return manifest, nil
-}
-
-func writeJSON(data any) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(data)
-}
+// Keep the old helper names for any residual references (not used by new code).
+var inspect = inspectCmd
