@@ -1,11 +1,15 @@
 package main
 
 import (
-	"github.com/WYGIN/rebaze/cli/internal/bazer"
+	"fmt"
+	"os"
+
+	"github.com/ep0ll/rebaze/cli/internal/bazer"
 )
 
 func main() {
-	if err := bazer.ReBaze(); err != nil {
-		panic(err)
+	if err := bazer.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }

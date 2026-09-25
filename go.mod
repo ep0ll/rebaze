@@ -1,8 +1,6 @@
-module github.com/WYGIN/rebaze
+module github.com/ep0ll/rebaze
 
-go 1.24
-
-toolchain go1.24.10
+go 1.23
 
 require (
 	github.com/google/go-containerregistry v0.20.6
